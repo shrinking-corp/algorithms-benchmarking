@@ -1,0 +1,170 @@
+# ============================================================
+# ASWS Benchmarking - Example Configuration
+# ============================================================
+# Copy this file to config.yaml and adjust as needed.
+# This file documents all configuration options for the benchmarking tool.
+# ============================================================
+
+benchmark:
+  n_iterations: 5           # Number of PSO iterations (outer optimization loop)
+  population_size: 5        # Number of candidate solutions (particles) per iteration
+  results_path: results     # Directory where results are saved (JSON, JSONL)
+  cache_dir: .cache/llm     # Directory for LLM response cache (disk, speeds up repeated runs)
+  language: python          # Target language for CodeBLEU metric (python | java | javascript | cpp)
+  log_level: INFO           # Logging level (DEBUG, INFO, WARNING, ERROR)
+  max_concurrent_llm: 4     # Max concurrent LLM calls per dataset item (controls parallelism)
+  request_timeout: 600      # HTTP timeout per LLM call in seconds (default: 10 min)
+  user_prompt_template: |
+    # Prompt sent to the LLM for every diagram.
+    # Placeholders: {puml} = diagram content, {language} = target language.
+    Convert the PlantUML class diagram below to {language} source code.
+
+    ```plantuml
+    {puml}
+    ```
+
+llms:
+  # List of LLM backends to use for code generation.
+  # Each entry defines one LLM client and its models.
+  - name: gpt-4o-mini           # Unique name for this LLM client
+    type: openai                # Backend type: openai | ollama | litellm_provider
+    models:
+      - gpt-4o-mini             # List of model names (can be one or many)
+    api_base: https://api.openai.com/v1   # API endpoint for the LLM
+    api_key_env: OPENAI_API_KEY           # Environment variable for API key
+    llm_params:
+      temperature: 0.2          # Sampling temperature (controls randomness)
+      top_p: 0.9                # Nucleus sampling parameter
+    system_prompt: |
+      # System prompt in ROSES framework sent to the LLM (for role and output control)
+      [Role]
+      You are an expert software developer specialising in object-oriented design
+      and source code generation from UML class diagrams.
+
+      [Objective]
+      Generate complete, compilable source code that faithfully implements every
+      class, interface, attribute, method, and relationship shown in the diagram.
+
+      [Scenario]
+      You are part of an automated benchmarking pipeline that evaluates diagram
+      shrinking algorithms. The user will send you a PlantUML class diagram
+      (possibly a reduced version). Your generated code is scored with CodeBLEU
+      against a reference implementation, so correctness and completeness are
+      critical - every element of the diagram must appear in the output.
+
+      [Expected output]
+      Return ONLY the raw source code.
+      - No markdown fences (no ```python or similar).
+      - No explanations, comments, or commentary outside the code itself.
+      - The output must be directly executable / compilable.
+
+      [Steps]
+      1. Identify every class and interface in the diagram.
+      2. For each class/interface reproduce all attributes (name + type) and
+         method signatures exactly as shown.
+      3. Implement every relationship: inheritance (extends/implements),
+         composition, aggregation, and association.
+      4. Where a method body is not specified, add a minimal stub
+         (e.g. `pass` in Python, `throw new UnsupportedOperationException()` in Java).
+      5. Do NOT invent classes, methods, attributes, or logic not present in the diagram.
+
+  # Add additional LLMs as needed, e.g. Ollama, LiteLLM, etc.
+
+# ---- Target algorithms whose parameters are being tuned ------------------
+target_algorithms:
+  # List of diagram shrinking algorithms to optimize.
+  # Each entry defines one algorithm and its parameter search space.
+  - name: Kruskal
+    type: kruskal
+    param_space:
+      - name: dependency
+        min: 0.1
+        max: 10.0
+        default: 1.0
+      - name: extension
+        min: 0.1
+        max: 10.0
+        default: 3.0
+      - name: implementation
+        min: 0.1
+        max: 10.0
+        default: 3.0
+      - name: aggregation
+        min: 0.1
+        max: 10.0
+        default: 2.0
+      - name: composition
+        min: 0.1
+        max: 10.0
+        default: 2.0
+      - name: association
+        min: 0.1
+        max: 10.0
+        default: 1.0
+
+  - name: Genetic
+    type: genetic_target
+    param_space:
+      - name: population_size
+        min: 5
+        max: 20
+        default: 10
+        is_integer: true
+      - name: generations
+        min: 3
+        max: 10
+        default: 5
+        is_integer: true
+      - name: mutation_rate
+        min: 0.01
+        max: 0.5
+        default: 0.1
+      - name: crossover_rate
+        min: 0.1
+        max: 1.0
+        default: 0.7
+      - name: exclusion_threshold
+        min: 0.1
+        max: 0.9
+        default: 0.5
+      - name: inclusion_threshold
+        min: 0.1
+        max: 0.9
+        default: 0.6
+      # Fitness scores - how much each edge type contributes to fitness.
+      # Values are normalised to sum=1 internally by the library.
+      - name: fitness__scores__class_class_edges
+        min: 0.01
+        max: 1.0
+        default: 0.6
+      - name: fitness__scores__class_attr_edges
+        min: 0.01
+        max: 1.0
+        default: 0.2
+      - name: fitness__scores__class_method_edges
+        min: 0.01
+        max: 1.0
+        default: 0.2
+      # Fitness coefficients - relative weight of each fitness component.
+      - name: fitness__coefficients__similarity
+        min: 0.1
+        max: 5.0
+        default: 1.0
+      - name: fitness__coefficients__edges
+        min: 0.1
+        max: 5.0
+        default: 1.0
+      - name: fitness__coefficients__shrink
+        min: 0.1
+        max: 5.0
+        default: 1.0
+
+# ---- Outer optimiser (PSO) -----------------------------------------------
+optimizer:
+  type: pso                  # Type of optimizer (currently only 'pso' is supported)
+  pso:
+    inertia: 0.729           # PSO inertia weight (exploration vs. exploitation)
+    cognitive: 1.494         # PSO cognitive parameter (particle's own best)
+    social: 1.494            # PSO social parameter (swarm/global best)
+
+# For more details, see the documentation and code comments.

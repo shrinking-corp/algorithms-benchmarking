@@ -1,0 +1,237 @@
+# ============================================================
+# ASWS Benchmarking - main configuration
+# ============================================================
+
+
+benchmark:
+  n_iterations: 5
+  population_size: 5
+  results_path: results
+  cache_dir: .cache/llm
+  language: python
+  log_level: INFO
+  max_concurrent_llm: 4
+  request_timeout: 600
+  user_prompt_template: |
+    Convert the PlantUML class diagram below to {language} source code.
+
+    ```plantuml
+    {puml}
+    ```
+
+llms:
+  - name: gpt-4o-mini
+    type: openai
+    models:
+      - gpt-4o-mini
+    api_base: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    llm_params:
+      temperature: 0.2
+      top_p: 0.9
+    system_prompt: |
+      [Role]
+      You are an expert software developer specialising in object-oriented design
+      and source code generation from UML class diagrams.
+
+      [Objective]
+      Generate complete, compilable source code that faithfully implements every
+      class, interface, attribute, method, and relationship shown in the diagram.
+
+      [Scenario]
+      You are part of an automated benchmarking pipeline that evaluates diagram
+      shrinking algorithms.  The user will send you a PlantUML class diagram
+      (possibly a reduced version).  Your generated code is scored with CodeBLEU
+      against a reference implementation, so correctness and completeness are
+      critical - every element of the diagram must appear in the output.
+
+      [Expected output]
+      Return ONLY the raw source code.
+      - No markdown fences (no ```python or similar).
+      - No explanations, comments, or commentary outside the code itself.
+      - The output must be directly executable / compilable.
+
+      [Steps]
+      1. Identify every class and interface in the diagram.
+      2. For each class/interface reproduce all attributes (name + type) and
+         method signatures exactly as shown.
+      3. Implement every relationship: inheritance (extends/implements),
+         composition, aggregation, and association.
+      4. Where a method body is not specified, add a minimal stub
+         (e.g. `pass` in Python, `throw new UnsupportedOperationException()` in Java).
+      5. Do NOT invent classes, methods, attributes, or logic not present in the diagram.
+
+
+  # - name: litellm-multi
+  #   type: litellm_provider
+  #   models:
+  #     - gpt-4o-mini
+  #     - claude-3-5-sonnet-20241022
+  #     - gemini/gemini-1.5-pro
+  #   api_base: http://localhost:4000
+  #   api_key_env: LITELLM_API_KEY
+  #   llm_params:
+  #     temperature: 0.2
+  #     top_p: 0.9
+  #   system_prompt: |
+  #     [Role]
+  #     You are an expert software developer specialising in object-oriented design
+  #     and source code generation from UML class diagrams.
+  #
+  #     [Objective]
+  #     Generate complete, compilable source code that faithfully implements every
+  #     class, interface, attribute, method, and relationship shown in the diagram.
+  #
+  #     [Scenario]
+  #     You are part of an automated benchmarking pipeline that evaluates diagram
+  #     shrinking algorithms.  The user will send you a PlantUML class diagram
+  #     (possibly a reduced version).  Your generated code is scored with CodeBLEU
+  #     against a reference implementation, so correctness and completeness are
+  #     critical - every element of the diagram must appear in the output.
+  #
+  #     [Expected output]
+  #     Return ONLY the raw source code.
+  #     - No markdown fences (no ```python or similar).
+  #     - No explanations, comments, or commentary outside the code itself.
+  #     - The output must be directly executable / compilable.
+  #
+  #     [Steps]
+  #     1. Identify every class and interface in the diagram.
+  #     2. For each class/interface reproduce all attributes (name + type) and
+  #        method signatures exactly as shown.
+  #     3. Implement every relationship: inheritance (extends/implements),
+  #        composition, aggregation, and association.
+  #     4. Where a method body is not specified, add a minimal stub.
+  #     5. Do NOT invent classes, methods, attributes, or logic not present in the diagram.
+  #
+  #     [Expected output]
+  #     Return ONLY the raw source code with no markdown fences, no explanations,
+  #     and no commentary.  The output must be directly executable/compilable.
+  #
+  #     [Steps]
+  #     1. Identify all classes, interfaces, attributes, and methods in the diagram.
+  #     2. Reproduce every relationship (inheritance, composition, association).
+  #     3. Add minimal constructor and method stubs where bodies are unspecified.
+  #     4. Do NOT add any classes, methods, or logic not present in the diagram.
+
+  # - name: ollama-llama3
+  #   type: ollama
+  #   models:
+  #     - llama3.2
+  #   api_base: http://localhost:11434
+  #   llm_params:
+  #     temperature: 0.2
+  #     top_p: 0.9
+  #   system_prompt: |
+  #     [Role]
+  #     You are an expert software developer specialising in object-oriented design
+  #     and code generation from UML diagrams.
+  #
+  #     [Objective]
+  #     Generate complete, compilable source code from a PlantUML class diagram.
+  #
+  #     [Scenario]
+  #     You are part of an automated benchmarking pipeline that evaluates diagram
+  #     shrinking algorithms.  The quality of generated code is measured by
+  #     CodeBLEU against a reference implementation, so correctness and
+  #     completeness are critical.
+  #
+  #     [Expected output]
+  #     Return ONLY the raw source code with no markdown fences, no explanations,
+  #     and no commentary.  The output must be directly executable/compilable.
+  #
+  #     [Steps]
+  #     1. Identify all classes, interfaces, attributes, and methods in the diagram.
+  #     2. Reproduce every relationship (inheritance, composition, association).
+  #     3. Add minimal constructor and method stubs where bodies are unspecified.
+  #     4. Do NOT add any classes, methods, or logic not present in the diagram.
+
+target_algorithms:
+  - name: Kruskal
+    type: kruskal
+    param_space:
+      - name: dependency
+        min: 0.1
+        max: 10.0
+        default: 1.0
+      - name: extension
+        min: 0.1
+        max: 10.0
+        default: 3.0
+      - name: implementation
+        min: 0.1
+        max: 10.0
+        default: 3.0
+      - name: aggregation
+        min: 0.1
+        max: 10.0
+        default: 2.0
+      - name: composition
+        min: 0.1
+        max: 10.0
+        default: 2.0
+      - name: association
+        min: 0.1
+        max: 10.0
+        default: 1.0
+
+  - name: Genetic
+    type: genetic_target
+    param_space:
+      - name: population_size
+        min: 5
+        max: 20
+        default: 10
+        is_integer: true
+      - name: generations
+        min: 3
+        max: 10
+        default: 5
+        is_integer: true
+      - name: mutation_rate
+        min: 0.01
+        max: 0.5
+        default: 0.1
+      - name: crossover_rate
+        min: 0.1
+        max: 1.0
+        default: 0.7
+      - name: exclusion_threshold
+        min: 0.1
+        max: 0.9
+        default: 0.5
+      - name: inclusion_threshold
+        min: 0.1
+        max: 0.9
+        default: 0.6
+      - name: fitness__scores__class_class_edges
+        min: 0.01
+        max: 1.0
+        default: 0.6
+      - name: fitness__scores__class_attr_edges
+        min: 0.01
+        max: 1.0
+        default: 0.2
+      - name: fitness__scores__class_method_edges
+        min: 0.01
+        max: 1.0
+        default: 0.2
+      - name: fitness__coefficients__similarity
+        min: 0.1
+        max: 5.0
+        default: 1.0
+      - name: fitness__coefficients__edges
+        min: 0.1
+        max: 5.0
+        default: 1.0
+      - name: fitness__coefficients__shrink
+        min: 0.1
+        max: 5.0
+        default: 1.0
+
+optimizer:
+  type: pso
+  pso:
+    inertia: 0.729
+    cognitive: 1.494
+    social: 1.494
