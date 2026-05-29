@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# algorithms-benchmarking
-=======
 # ASWS Benchmarking Tool
 
 ## Overview
@@ -101,4 +98,3 @@ All settings (LLM models, algorithms, parameter spaces, dataset splits, etc.) ar
 - **Add new target algorithms:** Implement an adapter in `src/target_algorithms/` and register in the factory.
 - **Add new optimization algorithms:** Implement a new optimizer class in `src/algorithms/` and register it in the `create_optimizer` factory function (`src/algorithms/factory.py`). The factory pattern allows easy extensibility for new optimization strategies.
 - **Add metrics:** Extend `src/metrics.py` and `src/fitness.py`.
->>>>>>> 0410da0109da8235093e78a47822af8162f7f1af
