@@ -1,0 +1,27 @@
+# Dataset (clone manually: git clone <repo> data/dataset)
+data/dataset/dataset/*
+data/dataset/divider/*
+
+# LLM cache
+.cache/
+
+# Results
+results/
+
+# Logs
+logs/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Env
+.env
+
+# Helper files
+.info/
+uv.lock
