@@ -11,13 +11,13 @@ import numpy as np
 
 from data.iterator import TrainIterator, ValidationIterator
 
-from .algorithms import create_optimizer
-from .algorithms.base import BaseAlgorithm, ConfigMismatchError
+from .algorithms import create_optimizer, OptimizerContext
+from .algorithms.base import ConfigMismatchError
 from .fitness import FitnessEvaluator
 from . import log_messages as MSG
 from .llm.factory import create_llm_client
 from .results_tracker import ResultsTracker
-from .target_algorithms import create_target_algorithm
+from .target_algorithms import create_target_algorithm, ShrinkingContext
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,7 @@ class Benchmarker:
                 logger.info(MSG.MODEL_START.format(llm=llm.name, model=model))
 
                 # Baseline: CodeBLEU(ref_code, LLM(original_puml)) on validation set.
+                # No context/strategy - original unmodified diagram goes to LLM.
                 baseline_evaluator = FitnessEvaluator(
                     llm=llm,
                     dataset=val_items,
@@ -114,8 +115,12 @@ class Benchmarker:
                     MSG.BASELINE_DONE.format(llm=llm.name, model=model, score=baseline_avg)
                 )
 
+                context = ShrinkingContext()
+                optimizer_context = OptimizerContext()
+
                 for alg_cfg in self.target_algorithm_configs:
                     target_alg = create_target_algorithm(alg_cfg)
+                    context.set_strategy(target_alg)
 
                     if self.results_tracker.is_done(run_key, target_alg.name):
                         logger.info(
@@ -131,13 +136,14 @@ class Benchmarker:
                         n_iterations=self.n_iterations,
                         population_size=self.population_size,
                     )
+                    optimizer_context.set_strategy(optimizer)
 
                     # PSO trains on the training split
                     train_evaluator = FitnessEvaluator(
                         llm=llm,
                         dataset=train_items,
-                        optimizer=optimizer,
-                        target_algorithm=target_alg,
+                        context=context,
+                        optimizer_context=optimizer_context,
                         language=self.language,
                         max_concurrent=self.max_concurrent,
                         prompt_template=self.prompt_template,
@@ -145,7 +151,7 @@ class Benchmarker:
                     )
 
                     def make_checkpoint_callback(
-                        llm_name: str, model_name: str, alg_name: str, opt: BaseAlgorithm
+                        llm_name: str, model_name: str, alg_name: str, opt_ctx: OptimizerContext
                     ):
                         def _callback(iteration: int, gbest_fitness: float, gbest_pos) -> None:
                             self.results_tracker.save_iteration_checkpoint(
@@ -154,7 +160,7 @@ class Benchmarker:
                                 iteration=iteration,
                                 n_iterations=self.n_iterations,
                                 gbest_fitness=gbest_fitness,
-                                gbest_params=opt.interpret(gbest_pos),
+                                gbest_params=opt_ctx.interpret(gbest_pos),
                                 gbest_solution=gbest_pos.tolist(),
                             )
                             logger.info(
@@ -167,7 +173,7 @@ class Benchmarker:
                         return _callback
 
                     def make_particle_callback(
-                        llm_name: str, model_name: str, alg_name: str, opt: BaseAlgorithm
+                        llm_name: str, model_name: str, alg_name: str, opt_ctx: OptimizerContext
                     ):
                         n_iter = self.n_iterations
                         n_agents = self.population_size
@@ -186,7 +192,7 @@ class Benchmarker:
                                         iter=iteration, n_iter=n_iter,
                                         agent=particle, n_agents=n_agents,
                                         fitness=fitness,
-                                        params=opt.interpret(position),
+                                        params=opt_ctx.interpret(position),
                                     )
                                 )
                             else:
@@ -209,7 +215,7 @@ class Benchmarker:
                     checkpoint = self.results_tracker.load_memento(run_key, target_alg.name)
                     if checkpoint is not None:
                         try:
-                            optimizer.restore_memento(checkpoint)
+                            optimizer_context.restore_memento(checkpoint)
                             logger.info(
                                 MSG.PSO_RESUMED.format(
                                     llm=llm.name, model=model, alg=target_alg.name,
@@ -228,18 +234,18 @@ class Benchmarker:
                             answer = _ask_resume()
                             if answer:
                                 logger.info("User chose to resume with original checkpoint parameters.")
-                                optimizer.restore_memento(checkpoint, force=True)
+                                optimizer_context.restore_memento(checkpoint, force=True)
                             else:
                                 logger.info("User chose to start fresh with new parameters.")
                                 self.results_tracker.clear_memento(run_key, target_alg.name)
 
-                    best_solution, best_fitness = await optimizer.optimize(
+                    best_solution, best_fitness = await optimizer_context.optimize(
                         train_evaluator.evaluate,
-                        on_iteration=make_checkpoint_callback(run_key, model, target_alg.name, optimizer),
+                        on_iteration=make_checkpoint_callback(run_key, model, target_alg.name, optimizer_context),
                         on_checkpoint=make_memento_callback(run_key, target_alg.name),
-                        on_particle=make_particle_callback(llm.name, model, target_alg.name, optimizer),
+                        on_particle=make_particle_callback(llm.name, model, target_alg.name, optimizer_context),
                     )
-                    best_params = optimizer.interpret(best_solution)
+                    best_params = optimizer_context.interpret(best_solution)
                     logger.info(
                         MSG.PSO_RESULT.format(
                             llm=llm.name, model=model, alg=target_alg.name,
@@ -251,8 +257,7 @@ class Benchmarker:
                     val_evaluator = FitnessEvaluator(
                         llm=llm,
                         dataset=val_items,
-                        optimizer=optimizer,
-                        target_algorithm=target_alg,
+                        context=context,
                         language=self.language,
                         max_concurrent=self.max_concurrent,
                         prompt_template=self.prompt_template,
@@ -264,8 +269,8 @@ class Benchmarker:
                     )
                     retention = final_avg / baseline_avg if baseline_avg > 0.0 else 0.0
 
-                    gbest_fit_history = list(optimizer._state.get("gbest_fit_history", []))
-                    gbest_pos_history = list(optimizer._state.get("gbest_pos_history", []))
+                    gbest_fit_history = optimizer_context.gbest_fit_history
+                    gbest_pos_history = optimizer_context.gbest_pos_history
 
                     result = {
                         "best_fitness": best_fitness,

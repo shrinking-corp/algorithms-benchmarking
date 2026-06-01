@@ -13,9 +13,9 @@ import numpy as np
 from .metrics import calculate_codebleu
 
 if TYPE_CHECKING:
-    from .algorithms.base import BaseAlgorithm
+    from .algorithms.context import OptimizerContext
     from .llm.client import LLMClient
-    from .target_algorithms.base import BaseTargetAlgorithm
+    from .target_algorithms.context import ShrinkingContext
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,21 @@ DatasetItem = Tuple[str, str]
 
 
 class FitnessEvaluator:
+    """
+    Client in the Strategy pattern.
+
+    Uses ShrinkingContext to process PUML diagrams before LLM evaluation.
+    The concrete strategy (which algorithm to apply) is decided externally
+    by Benchmarker via context.set_strategy() before this evaluator is used.
+    """
+
     def __init__(
         self,
         llm: "LLMClient",
         dataset: List[DatasetItem],
         prompt_template: str,
-        optimizer: "Optional[BaseAlgorithm]" = None,
-        target_algorithm: "Optional[BaseTargetAlgorithm]" = None,
+        context: "Optional[ShrinkingContext]" = None,
+        optimizer_context: "Optional[OptimizerContext]" = None,
         language: str = "python",
         max_concurrent: int = 5,
         model: Optional[str] = None,
@@ -38,8 +46,8 @@ class FitnessEvaluator:
         self.llm = llm
         self.model = model
         self.dataset = dataset
-        self.optimizer = optimizer
-        self.target_algorithm = target_algorithm
+        self.context = context
+        self.optimizer_context = optimizer_context
         self.language = language
         self.prompt_template = prompt_template
         self._semaphore = asyncio.Semaphore(max_concurrent)
@@ -54,12 +62,12 @@ class FitnessEvaluator:
         """
         PSO fitness function - called on training set.
 
-        fitness = AVG CodeBLEU(reference_code, LLM(algo(puml, params)))
+        fitness = AVG CodeBLEU(reference_code, LLM(context.execute(puml, params)))
         """
-        if self.optimizer is None or self.target_algorithm is None:
-            raise RuntimeError("evaluate() requires optimizer and target_algorithm to be set.")
+        if self.optimizer_context is None or self.context is None:
+            raise RuntimeError("evaluate() requires both optimizer_context and context to be set.")
         self.eval_count += 1
-        params = self.optimizer.interpret(solution)
+        params = self.optimizer_context.interpret(solution)
 
         tasks = [self._score_shrunken(ref, puml, params) for ref, puml in self.dataset]
         scores = await asyncio.gather(*tasks)
@@ -70,22 +78,23 @@ class FitnessEvaluator:
 
     async def compute_final_scores(self, best_params: dict) -> Dict[int, float]:
         """
-        Final per-item CodeBLEU scores on the validation set using best_params.
+        Per-item CodeBLEU scores on the validation set using best_params.
 
+        Delegates processing to the active strategy via context.execute().
         Returns {index: score}.
         """
-        if self.target_algorithm is None:
-            raise RuntimeError("compute_final_scores() requires target_algorithm to be set.")
+        if self.context is None:
+            raise RuntimeError("compute_final_scores() requires context to be set.")
         tasks = [self._score_shrunken(ref, puml, best_params) for ref, puml in self.dataset]
         scores = await asyncio.gather(*tasks)
         return {i: float(s) for i, s in enumerate(scores)}
 
     async def compute_baseline_scores(self) -> Dict[int, float]:
         """
-        Baseline per-item CodeBLEU on the validation set.
+        Baseline per-item CodeBLEU scores - no strategy applied.
 
         baseline = CodeBLEU(reference_code, LLM(original_puml))
-        This is the upper bound - the best quality without any shrinking.
+        The original unmodified diagram is sent directly to the LLM.
 
         Returns {index: score}.
         """
@@ -101,11 +110,11 @@ class FitnessEvaluator:
         return await self.llm.query(prompt)
 
     async def _score_shrunken(self, reference_code: str, puml: str, params: dict) -> float:
-        """CodeBLEU(reference_code, LLM(algo(puml, params)))."""
+        """CodeBLEU(reference_code, LLM(context.execute(puml, params)))."""
         async with self._semaphore:
             loop = asyncio.get_running_loop()
             shrunken = await loop.run_in_executor(
-                None, functools.partial(self.target_algorithm.run, puml, params)
+                None, functools.partial(self.context.execute, puml, params)
             )
             prompt = self.build_prompt(shrunken)
             generated = await self._query(prompt)

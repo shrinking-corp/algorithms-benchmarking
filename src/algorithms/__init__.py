@@ -1,6 +1,7 @@
 from .base import BaseAlgorithm
-from .memento import AlgorithmMemento
+from .context import OptimizerContext
 from .factory import create_optimizer
+from .memento import AlgorithmMemento
 from .pso import PSOAlgorithm
 
-__all__ = ["BaseAlgorithm", "AlgorithmMemento", "PSOAlgorithm", "create_optimizer"]
+__all__ = ["BaseAlgorithm", "OptimizerContext", "AlgorithmMemento", "PSOAlgorithm", "create_optimizer"]
